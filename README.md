@@ -22,14 +22,34 @@ go build .
 
 ## Usage
 
-### Starting the Server
+### Starting the Servers
 
-Run the server:
+#### Main MCP Server (Port 3333)
+
+Run the main server:
 ```bash
 go run .
 ```
 
 The server will start on port `3333` and log the available endpoints:
+
+#### FileSystem MCP Server (Port 3335)
+
+If you have filesystem MCP configured in your `mcp-config.json`, you need to start the filesystem server separately:
+
+**Option 1: Using the script**
+```bash
+./start-filesystem-server.sh
+```
+
+**Option 2: Direct command**
+```bash
+go run ./cmd/filesystem-server/main.go
+```
+
+The filesystem server will start on port `3335` and provides file system operations.
+
+**Note:** Both servers can run simultaneously. The main server (port 3333) acts as a gateway and can connect to the filesystem server (port 3335) when configured.
 ```
 MCP Server starting on port :3333
 Endpoints available:
@@ -618,10 +638,24 @@ port := ":8080"  // Change to your desired port
 4. Ensure `google_pse.enabled` is set to `true` in config file
 
 ### Connection Refused
-Ensure the server is running before making requests:
+
+**Main Server:**
+Ensure the main server is running before making requests:
 ```bash
 go run .
 ```
+
+**FileSystem Server:**
+If you see an error like `dial tcp [::1]:3335: connect: connection refused`, you need to start the filesystem server:
+```bash
+# Option 1: Using the script
+./start-filesystem-server.sh
+
+# Option 2: Direct command
+go run ./cmd/filesystem-server/main.go
+```
+
+The filesystem server must be running on port 3335 if you have it enabled in your `mcp-config.json`. You can disable it by setting `"enabled": false` in the filesystem server configuration.
 
 ### JSON Parsing Errors
 Ensure request bodies are valid JSON and Content-Type header is set:

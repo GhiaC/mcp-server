@@ -121,4 +121,6 @@ tmp/
 ./mcp-server
 ./.idea
 .idea
-
+./mcp-go
+mcp-go
+mcp-config.json
