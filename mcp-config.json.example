@@ -7,15 +7,165 @@
   },
   "servers": [
     {
-      "name": "cloudflare",
-      "url": "https://api.cloudflare.com/mcp",
+      "name": "cloudflare-observability",
+      "url": "https://observability.mcp.cloudflare.com/mcp",
       "transport": "http",
       "enabled": true,
       "prefix": "cloudflare:",
       "auth": {
-        "Authorization": "Bearer YOUR_API_TOKEN",
-        "X-Auth-Email": "your-email@example.com"
-      }
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare Observability - Debug and get insight into logs and analytics"
+    },
+    {
+      "name": "cloudflare-bindings",
+      "url": "https://bindings.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-bindings:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare Workers Bindings - Build Workers applications with storage, AI, and compute"
+    },
+    {
+      "name": "cloudflare-docs",
+      "url": "https://docs.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-docs:",
+      "auth": {},
+      "comment": "Cloudflare Documentation - Get up to date reference information"
+    },
+    {
+      "name": "cloudflare-radar",
+      "url": "https://radar.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-radar:",
+      "auth": {},
+      "comment": "Cloudflare Radar - Get global Internet traffic insights and trends (No auth required)"
+    },
+    {
+      "name": "cloudflare-browser",
+      "url": "https://browser.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-browser:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare Browser Rendering - Fetch web pages, convert to markdown, take screenshots"
+    },
+    {
+      "name": "cloudflare-builds",
+      "url": "https://builds.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-builds:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare Workers Builds - Get insights and manage your Workers Builds"
+    },
+    {
+      "name": "cloudflare-container",
+      "url": "https://containers.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-container:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare Container - Spin up a sandbox development environment"
+    },
+    {
+      "name": "cloudflare-logpush",
+      "url": "https://logs.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-logpush:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare Logpush - Get quick summaries for Logpush job health"
+    },
+    {
+      "name": "cloudflare-ai-gateway",
+      "url": "https://ai-gateway.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-ai-gateway:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare AI Gateway - Search logs, get details about prompts and responses"
+    },
+    {
+      "name": "cloudflare-autorag",
+      "url": "https://autorag.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-autorag:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare AutoRAG - List and search documents on your AutoRAGs"
+    },
+    {
+      "name": "cloudflare-auditlogs",
+      "url": "https://auditlogs.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-auditlogs:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare Audit Logs - Query audit logs and generate reports"
+    },
+    {
+      "name": "cloudflare-dns-analytics",
+      "url": "https://dns-analytics.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-dns-analytics:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare DNS Analytics - Optimize DNS performance and debug issues"
+    },
+    {
+      "name": "cloudflare-dex",
+      "url": "https://dex.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-dex:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare Digital Experience Monitoring - Get insight on critical applications"
+    },
+    {
+      "name": "cloudflare-casb",
+      "url": "https://casb.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-casb:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare One CASB - Identify security misconfigurations for SaaS applications"
+    },
+    {
+      "name": "cloudflare-graphql",
+      "url": "https://graphql.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "cloudflare-graphql:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      },
+      "comment": "Cloudflare GraphQL - Get analytics data using Cloudflare's GraphQL API"
     },
     {
       "name": "filesystem",

@@ -354,6 +354,41 @@ curl -X POST http://localhost:3333/tools/call \
 You can also create proxy wrappers for specific MCP servers. Examples:
 - `tools/proxy/cloudflare.go` - Cloudflare MCP proxy
 - `tools/proxy/filesystem.go` - File System MCP proxy
+- `tools/proxy/google_pse.go` - Google PSE proxy wrapper
+
+### Cloudflare MCP Servers
+
+Cloudflare provides multiple MCP servers for different use cases. See [docs/CLOUDFLARE_MCP.md](docs/CLOUDFLARE_MCP.md) for detailed information.
+
+**Quick Setup:**
+
+Add to `mcp-config.json`:
+```json
+{
+  "servers": [
+    {
+      "name": "cloudflare-observability",
+      "url": "https://observability.mcp.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": true,
+      "prefix": "cloudflare:",
+      "auth": {
+        "Authorization": "Bearer YOUR_CLOUDFLARE_API_TOKEN"
+      }
+    }
+  ]
+}
+```
+
+**Available Cloudflare Servers:**
+- Documentation: `https://docs.mcp.cloudflare.com/mcp` (no auth)
+- Observability: `https://observability.mcp.cloudflare.com/mcp` (auth required)
+- Workers Bindings: `https://bindings.mcp.cloudflare.com/mcp` (auth required)
+- Radar: `https://radar.mcp.cloudflare.com/mcp` (no auth)
+- Browser Rendering: `https://browser.mcp.cloudflare.com/mcp` (auth required)
+- And [many more](https://github.com/cloudflare/mcp-server-cloudflare)...
+
+See the [Cloudflare MCP documentation](docs/CLOUDFLARE_MCP.md) for the complete list and setup instructions.
 
 #### File System MCP Example
 
