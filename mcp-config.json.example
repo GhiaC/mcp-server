@@ -12,6 +12,15 @@
       }
     },
     {
+      "name": "filesystem",
+      "url": "http://localhost:3335",
+      "transport": "http",
+      "enabled": true,
+      "prefix": "filesystem:",
+      "auth": {},
+      "comment": "File System MCP - provides file read/write operations"
+    },
+    {
       "name": "another-mcp",
       "url": "http://localhost:3334",
       "transport": "http",

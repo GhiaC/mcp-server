@@ -174,7 +174,8 @@ mcp-server/
 │   ├── echo.go            # Echo tool implementation
 │   ├── echo_test.go       # Echo tool tests
 │   └── proxy/             # Proxy tools for remote MCPs
-│       └── cloudflare.go # Cloudflare proxy example
+│       ├── cloudflare.go # Cloudflare proxy example
+│       └── filesystem.go  # File System MCP proxy
 └── transport/               # Transport layer abstraction
     ├── interface.go       # Transport interface
     └── http.go           # HTTP transport implementation
@@ -280,7 +281,60 @@ curl -X POST http://localhost:3333/tools/call \
 
 ### Proxy Tools
 
-You can also create proxy wrappers for specific MCP servers. See `tools/proxy/cloudflare.go` for an example.
+You can also create proxy wrappers for specific MCP servers. Examples:
+- `tools/proxy/cloudflare.go` - Cloudflare MCP proxy
+- `tools/proxy/filesystem.go` - File System MCP proxy
+
+#### File System MCP Example
+
+The File System MCP proxy provides convenient methods for file operations:
+
+```go
+import "mcp-go/tools/proxy"
+
+// Create proxy
+fsProxy := proxy.NewFileSystemProxy(gateway)
+
+// Read a file
+response, err := fsProxy.ReadFile(ctx, "/path/to/file.txt")
+
+// Write a file
+response, err := fsProxy.WriteFile(ctx, "/path/to/file.txt", "content")
+
+// List directory
+response, err := fsProxy.ListDirectory(ctx, "/path/to/dir")
+
+// Create directory
+response, err := fsProxy.CreateDirectory(ctx, "/path/to/newdir")
+
+// Delete file
+response, err := fsProxy.DeleteFile(ctx, "/path/to/file.txt")
+```
+
+**Available File System Tools:**
+- `filesystem:read_file` - Read file contents
+- `filesystem:write_file` - Write content to file
+- `filesystem:list_directory` - List files in directory
+- `filesystem:create_directory` - Create a new directory
+- `filesystem:delete_file` - Delete a file
+
+**Example API Call:**
+```bash
+# Read a file
+curl -X POST http://localhost:3333/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"filesystem:read_file","arguments":{"path":"/path/to/file.txt"}}'
+
+# Write a file
+curl -X POST http://localhost:3333/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"filesystem:write_file","arguments":{"path":"/path/to/file.txt","content":"Hello World"}}'
+
+# List directory
+curl -X POST http://localhost:3333/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"filesystem:list_directory","arguments":{"path":"/path/to/dir"}}'
+```
 
 ## Adding New Tools
 
@@ -385,6 +439,19 @@ curl http://localhost:3333/tools/list
 curl -X POST http://localhost:3333/tools/call \
   -H "Content-Type: application/json" \
   -d '{"name":"echo","arguments":{"message":"Hello from MCP!"}}'
+```
+
+5. Call a File System tool (if configured):
+```bash
+# Read a file
+curl -X POST http://localhost:3333/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"filesystem:read_file","arguments":{"path":"/path/to/file.txt"}}'
+
+# List directory
+curl -X POST http://localhost:3333/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"filesystem:list_directory","arguments":{"path":"/tmp"}}'
 ```
 
 ## Troubleshooting
