@@ -122,6 +122,10 @@ func (s *Server) handleToolsList(w http.ResponseWriter, r *http.Request) {
 	echoTool := tools.GetEchoTool()
 	allTools = append(allTools, echoTool)
 
+	// Add local Google PSE tool
+	googlePSETool := tools.GetGooglePSETool()
+	allTools = append(allTools, googlePSETool)
+
 	// Add tools from gateway (remote MCP servers)
 	if s.gateway != nil {
 		ctx := r.Context()
@@ -173,6 +177,31 @@ func (s *Server) handleToolsCall(w http.ResponseWriter, r *http.Request) {
 				{
 					Type: "text",
 					Text: message,
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
+			return
+		}
+		return
+	}
+
+	// Handle local Google PSE tool
+	if req.Name == "google_pse_search" {
+		result, err := tools.CallGooglePSE(req.Arguments)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error calling Google PSE tool: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		response := ToolCallResponse{
+			Content: []ContentItem{
+				{
+					Type: "text",
+					Text: result,
 				},
 			},
 		}

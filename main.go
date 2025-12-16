@@ -6,6 +6,8 @@ import (
 	"mcp-go/config"
 	"mcp-go/gateway"
 	"mcp-go/server"
+	"mcp-go/tools"
+	"os"
 )
 
 func main() {
@@ -33,6 +35,16 @@ func main() {
 	if err := gw.InitializeAll(ctx); err != nil {
 		log.Printf("Warning: Some MCP clients failed to initialize: %v", err)
 		log.Println("Server will continue with available clients")
+	}
+
+	// Configure Google PSE if environment variables are set
+	apiKey := os.Getenv("GOOGLE_PSE_API_KEY")
+	searchEngineID := os.Getenv("GOOGLE_PSE_SEARCH_ENGINE_ID")
+	if apiKey != "" && searchEngineID != "" {
+		tools.SetGooglePSEConfig(apiKey, searchEngineID)
+		log.Println("Google PSE configured successfully")
+	} else {
+		log.Println("Google PSE not configured (set GOOGLE_PSE_API_KEY and GOOGLE_PSE_SEARCH_ENGINE_ID env vars)")
 	}
 
 	// Start server with gateway
