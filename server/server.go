@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"mcp-go/gateway"
 	"mcp-go/tools"
 	"net/http"
 )
@@ -23,7 +24,19 @@ type ServerInfo struct {
 
 // ToolsListResponse represents the response for /tools/list endpoint
 type ToolsListResponse struct {
-	Tools []tools.EchoTool `json:"tools"`
+	Tools []interface{} `json:"tools"` // Can be EchoTool or transport.Tool
+}
+
+// Server holds the server state including gateway
+type Server struct {
+	gateway *gateway.Gateway
+}
+
+// NewServer creates a new server instance
+func NewServer(gw *gateway.Gateway) *Server {
+	return &Server{
+		gateway: gw,
+	}
 }
 
 // ToolCallRequest represents the request for /tools/call endpoint
@@ -45,9 +58,16 @@ type ContentItem struct {
 
 // Start starts the HTTP server on port 3333
 func Start() {
+	StartWithGateway(nil)
+}
+
+// StartWithGateway starts the HTTP server with a gateway
+func StartWithGateway(gw *gateway.Gateway) {
+	srv := NewServer(gw)
+
 	http.HandleFunc("/initialize", handleInitialize)
-	http.HandleFunc("/tools/list", handleToolsList)
-	http.HandleFunc("/tools/call", handleToolsCall)
+	http.HandleFunc("/tools/list", srv.handleToolsList)
+	http.HandleFunc("/tools/call", srv.handleToolsCall)
 
 	port := ":3333"
 	log.Printf("MCP Server starting on port %s\n", port)
@@ -55,6 +75,9 @@ func Start() {
 	log.Println("  GET  /initialize")
 	log.Println("  GET  /tools/list")
 	log.Println("  POST /tools/call")
+	if gw != nil {
+		log.Println("Gateway enabled: Remote MCP servers will be accessible")
+	}
 
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatalf("Server failed to start: %v\n", err)
@@ -87,15 +110,34 @@ func handleInitialize(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleToolsList handles GET /tools/list
-func handleToolsList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleToolsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	var allTools []interface{}
+
+	// Add local echo tool
 	echoTool := tools.GetEchoTool()
+	allTools = append(allTools, echoTool)
+
+	// Add tools from gateway (remote MCP servers)
+	if s.gateway != nil {
+		ctx := r.Context()
+		remoteTools, err := s.gateway.ListAllTools(ctx)
+		if err != nil {
+			log.Printf("Warning: Failed to list remote tools: %v", err)
+		} else {
+			// Convert transport.Tool to interface{} for JSON encoding
+			for _, tool := range remoteTools {
+				allTools = append(allTools, tool)
+			}
+		}
+	}
+
 	response := ToolsListResponse{
-		Tools: []tools.EchoTool{echoTool},
+		Tools: allTools,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -106,7 +148,7 @@ func handleToolsList(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleToolsCall handles POST /tools/call
-func handleToolsCall(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleToolsCall(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -118,7 +160,7 @@ func handleToolsCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle echo tool
+	// Handle local echo tool
 	if req.Name == "echo" {
 		message, err := tools.CallEcho(req.Arguments)
 		if err != nil {
@@ -143,6 +185,61 @@ func handleToolsCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Try to handle via gateway (remote MCP servers)
+	if s.gateway != nil {
+		ctx := r.Context()
+		remoteResp, err := s.gateway.CallTool(ctx, req.Name, req.Arguments)
+		if err == nil {
+			// Convert transport.ToolResponse to ToolCallResponse
+			response := ToolCallResponse{
+				Content: make([]ContentItem, len(remoteResp.Content)),
+			}
+			for i, item := range remoteResp.Content {
+				response.Content[i] = ContentItem{
+					Type: item.Type,
+					Text: item.Text,
+				}
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+		// If error is not "not found", return error
+		if !isNotFoundError(err) {
+			http.Error(w, fmt.Sprintf("Error calling remote tool: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	// Unknown tool
 	http.Error(w, "Tool not found", http.StatusNotFound)
+}
+
+// isNotFoundError checks if error is a "not found" error
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	return contains(errMsg, "not found")
+}
+
+// contains checks if string contains substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) &&
+		(s == substr ||
+			(len(s) > len(substr) && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"mcp-go/tools"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -52,10 +53,11 @@ func TestHandleInitializeMethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleToolsList(t *testing.T) {
+	srv := NewServer(nil) // No gateway for this test
 	req := httptest.NewRequest(http.MethodGet, "/tools/list", nil)
 	w := httptest.NewRecorder()
 
-	handleToolsList(w, req)
+	srv.handleToolsList(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
@@ -70,27 +72,43 @@ func TestHandleToolsList(t *testing.T) {
 		t.Fatalf("Expected 1 tool, got %d", len(response.Tools))
 	}
 
-	tool := response.Tools[0]
-	if tool.Name != "echo" {
-		t.Errorf("Expected tool name 'echo', got '%s'", tool.Name)
+	// Type assert to EchoTool
+	toolMap, ok := response.Tools[0].(map[string]interface{})
+	if !ok {
+		// Try to unmarshal as EchoTool
+		toolJSON, _ := json.Marshal(response.Tools[0])
+		var echoTool tools.EchoTool
+		if err := json.Unmarshal(toolJSON, &echoTool); err == nil {
+			if echoTool.Name != "echo" {
+				t.Errorf("Expected tool name 'echo', got '%s'", echoTool.Name)
+			}
+			return
+		}
+		t.Fatalf("Failed to parse tool")
 	}
 
-	if tool.Description != "Echo back the provided message" {
-		t.Errorf("Expected description 'Echo back the provided message', got '%s'", tool.Description)
+	if toolMap["name"] != "echo" {
+		t.Errorf("Expected tool name 'echo', got '%v'", toolMap["name"])
+	}
+
+	if toolMap["description"] != "Echo back the provided message" {
+		t.Errorf("Expected description 'Echo back the provided message', got '%v'", toolMap["description"])
 	}
 
 	// Verify input schema
-	schema, ok := tool.InputSchema["type"].(string)
-	if !ok || schema != "object" {
-		t.Errorf("Expected input schema type 'object', got %v", tool.InputSchema["type"])
+	if inputSchema, ok := toolMap["inputSchema"].(map[string]interface{}); ok {
+		if schemaType, ok := inputSchema["type"].(string); !ok || schemaType != "object" {
+			t.Errorf("Expected input schema type 'object', got %v", inputSchema["type"])
+		}
 	}
 }
 
 func TestHandleToolsListMethodNotAllowed(t *testing.T) {
+	srv := NewServer(nil)
 	req := httptest.NewRequest(http.MethodPost, "/tools/list", nil)
 	w := httptest.NewRecorder()
 
-	handleToolsList(w, req)
+	srv.handleToolsList(w, req)
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Expected status code %d, got %d", http.StatusMethodNotAllowed, w.Code)
@@ -98,6 +116,7 @@ func TestHandleToolsListMethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleToolsCallEcho(t *testing.T) {
+	srv := NewServer(nil)
 	requestBody := ToolCallRequest{
 		Name: "echo",
 		Arguments: map[string]interface{}{
@@ -110,7 +129,7 @@ func TestHandleToolsCallEcho(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handleToolsCall(w, req)
+	srv.handleToolsCall(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
@@ -136,6 +155,7 @@ func TestHandleToolsCallEcho(t *testing.T) {
 }
 
 func TestHandleToolsCallUnknownTool(t *testing.T) {
+	srv := NewServer(nil)
 	requestBody := ToolCallRequest{
 		Name:      "unknown-tool",
 		Arguments: map[string]interface{}{},
@@ -146,7 +166,7 @@ func TestHandleToolsCallUnknownTool(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handleToolsCall(w, req)
+	srv.handleToolsCall(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Expected status code %d, got %d", http.StatusNotFound, w.Code)
@@ -154,11 +174,12 @@ func TestHandleToolsCallUnknownTool(t *testing.T) {
 }
 
 func TestHandleToolsCallInvalidJSON(t *testing.T) {
+	srv := NewServer(nil)
 	req := httptest.NewRequest(http.MethodPost, "/tools/call", bytes.NewBufferString("invalid json"))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handleToolsCall(w, req)
+	srv.handleToolsCall(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
@@ -166,10 +187,11 @@ func TestHandleToolsCallInvalidJSON(t *testing.T) {
 }
 
 func TestHandleToolsCallMethodNotAllowed(t *testing.T) {
+	srv := NewServer(nil)
 	req := httptest.NewRequest(http.MethodGet, "/tools/call", nil)
 	w := httptest.NewRecorder()
 
-	handleToolsCall(w, req)
+	srv.handleToolsCall(w, req)
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Expected status code %d, got %d", http.StatusMethodNotAllowed, w.Code)

@@ -159,13 +159,25 @@ mcp-server/
 ├── go.mod                    # Go module definition
 ├── main.go                   # Application entry point
 ├── README.md                 # This file
-├── server/
-│   ├── server.go            # HTTP server and endpoint handlers
-│   ├── server_test.go       # Unit tests for endpoints
-│   └── integration_test.go  # Integration tests
-└── tools/
-    ├── echo.go              # Echo tool implementation
-    └── echo_test.go         # Echo tool tests
+├── mcp-config.json.example  # Example configuration file
+├── client/                   # MCP client implementation
+│   └── client.go           # Client interface and HTTP client
+├── config/                   # Configuration management
+│   └── config.go           # Config loading and parsing
+├── gateway/                  # Gateway for multiple MCP servers
+│   └── gateway.go         # Gateway manager
+├── server/                   # HTTP server
+│   ├── server.go          # HTTP server and endpoint handlers
+│   ├── server_test.go     # Unit tests for endpoints
+│   └── integration_test.go # Integration tests
+├── tools/                    # Tool implementations
+│   ├── echo.go            # Echo tool implementation
+│   ├── echo_test.go       # Echo tool tests
+│   └── proxy/             # Proxy tools for remote MCPs
+│       └── cloudflare.go # Cloudflare proxy example
+└── transport/               # Transport layer abstraction
+    ├── interface.go       # Transport interface
+    └── http.go           # HTTP transport implementation
 ```
 
 ## Testing
@@ -197,9 +209,82 @@ go test ./... -cover
 - `server/integration_test.go`: End-to-end workflow tests
 - `tools/echo_test.go`: Tool-specific tests
 
+## Connecting to Other MCP Servers
+
+This server includes a **Gateway** system that allows you to connect to and use tools from other MCP servers (like Cloudflare, GitHub, etc.).
+
+### Architecture
+
+The gateway system consists of:
+
+- **`client/`**: MCP client implementation for connecting to remote servers
+- **`gateway/`**: Gateway manager for handling multiple MCP connections
+- **`transport/`**: Transport layer abstraction (HTTP, SSE, stdio)
+- **`config/`**: Configuration management for MCP servers
+
+### Configuration
+
+#### Option 1: Configuration File
+
+Create a `mcp-config.json` file in the project root:
+
+```json
+{
+  "servers": [
+    {
+      "name": "cloudflare",
+      "url": "https://api.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": true,
+      "prefix": "cloudflare:",
+      "auth": {
+        "Authorization": "Bearer YOUR_API_TOKEN",
+        "X-Auth-Email": "your-email@example.com"
+      }
+    }
+  ]
+}
+```
+
+#### Option 2: Environment Variables
+
+Set the `MCP_SERVERS` environment variable:
+
+```bash
+export MCP_SERVERS='[{"name":"cloudflare","url":"https://api.cloudflare.com/mcp","transport":"http","enabled":true,"prefix":"cloudflare:"}]'
+```
+
+### Using Remote Tools
+
+Once configured, remote tools will be automatically available:
+
+1. **List all tools** (local + remote):
+```bash
+curl http://localhost:3333/tools/list
+```
+
+2. **Call a remote tool** (using prefix):
+```bash
+curl -X POST http://localhost:3333/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"cloudflare:list_zones","arguments":{}}'
+```
+
+### Gateway Features
+
+- ✅ **Automatic Tool Discovery**: Remote tools are automatically included in `/tools/list`
+- ✅ **Tool Prefixing**: Use prefixes (e.g., `cloudflare:`) to avoid naming conflicts
+- ✅ **Multiple Servers**: Connect to multiple MCP servers simultaneously
+- ✅ **Error Handling**: Graceful handling of connection failures
+- ✅ **Transport Abstraction**: Support for HTTP, SSE, and stdio transports
+
+### Proxy Tools
+
+You can also create proxy wrappers for specific MCP servers. See `tools/proxy/cloudflare.go` for an example.
+
 ## Adding New Tools
 
-To add a new tool:
+To add a new local tool:
 
 1. Create a new file in `tools/` directory (e.g., `tools/my_tool.go`):
 ```go

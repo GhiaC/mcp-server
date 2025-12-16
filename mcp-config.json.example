@@ -1,0 +1,23 @@
+{
+  "servers": [
+    {
+      "name": "cloudflare",
+      "url": "https://api.cloudflare.com/mcp",
+      "transport": "http",
+      "enabled": true,
+      "prefix": "cloudflare:",
+      "auth": {
+        "Authorization": "Bearer YOUR_API_TOKEN",
+        "X-Auth-Email": "your-email@example.com"
+      }
+    },
+    {
+      "name": "another-mcp",
+      "url": "http://localhost:3334",
+      "transport": "http",
+      "enabled": false,
+      "prefix": "other:"
+    }
+  ]
+}
+

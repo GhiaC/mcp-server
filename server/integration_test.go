@@ -32,9 +32,10 @@ func TestFullWorkflow(t *testing.T) {
 	}
 
 	// Step 2: List tools
+	srv := NewServer(nil)
 	listReq := httptest.NewRequest(http.MethodGet, "/tools/list", nil)
 	listW := httptest.NewRecorder()
-	handleToolsList(listW, listReq)
+	srv.handleToolsList(listW, listReq)
 
 	if listW.Code != http.StatusOK {
 		t.Fatalf("List tools failed with status %d", listW.Code)
@@ -61,7 +62,7 @@ func TestFullWorkflow(t *testing.T) {
 	callReq := httptest.NewRequest(http.MethodPost, "/tools/call", bytes.NewBuffer(bodyBytes))
 	callReq.Header.Set("Content-Type", "application/json")
 	callW := httptest.NewRecorder()
-	handleToolsCall(callW, callReq)
+	srv.handleToolsCall(callW, callReq)
 
 	if callW.Code != http.StatusOK {
 		t.Fatalf("Call tool failed with status %d", callW.Code)
@@ -90,12 +91,13 @@ func TestMCPResponseFormat(t *testing.T) {
 		},
 	}
 
+	srv := NewServer(nil)
 	bodyBytes, _ := json.Marshal(callBody)
 	req := httptest.NewRequest(http.MethodPost, "/tools/call", bytes.NewBuffer(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	handleToolsCall(w, req)
+	srv.handleToolsCall(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("Expected status 200, got %d", w.Code)
