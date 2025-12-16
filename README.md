@@ -2,21 +2,6 @@
 
 A minimal, standards-compliant Model Context Protocol (MCP) server implementation in Go. This server provides HTTP-based endpoints for MCP communication and demonstrates a clean, extensible architecture using only the Go standard library.
 
-## Features
-
-- ✅ **MCP Protocol Compliant**: Implements MCP protocol version `2024-11-05`
-- ✅ **HTTP Transport**: Uses standard HTTP/JSON for communication
-- ✅ **Tool System**: Extensible tool architecture with example Echo tool
-- ✅ **Standard Library Only**: No external dependencies required
-- ✅ **Comprehensive Tests**: Full test coverage with unit and integration tests
-- ✅ **Clean Architecture**: Well-structured, readable, and maintainable code
-
-## Requirements
-
-- Go 1.21 or higher
-- No external dependencies (uses only Go standard library)
-- (Optional) Google PSE API Key and Search Engine ID for web search functionality
-
 ## Installation
 
 1. Clone or download this repository:
