@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -40,6 +41,97 @@ func NewHTTPTransport(baseURL string) *HTTPTransport {
 // SetHeader sets a custom header for all requests
 func (t *HTTPTransport) SetHeader(key, value string) {
 	t.headers[key] = value
+}
+
+// parseSSEResponse parses a Server-Sent Events (SSE) stream and extracts JSON-RPC messages
+// SSE format: "data: {json}\n\n" or "event: message\ndata: {json}\n\n"
+func parseSSEResponse(body io.Reader) ([]byte, error) {
+	// Read the entire body first
+	bodyBytes, err := io.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(bodyBytes))
+	var currentData strings.Builder
+	var jsonMessages [][]byte
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if this is a data line
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			currentData.WriteString(data)
+		} else if strings.HasPrefix(line, "event: ") {
+			// Event type line - if we have accumulated data, save it
+			if currentData.Len() > 0 {
+				jsonMessages = append(jsonMessages, []byte(currentData.String()))
+				currentData.Reset()
+			}
+		} else if line == "" {
+			// Empty line marks end of event - save accumulated data if any
+			if currentData.Len() > 0 {
+				jsonMessages = append(jsonMessages, []byte(currentData.String()))
+				currentData.Reset()
+			}
+		}
+	}
+
+	// Don't forget the last data block if there's no trailing newline
+	if currentData.Len() > 0 {
+		jsonMessages = append(jsonMessages, []byte(currentData.String()))
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read SSE stream: %w", err)
+	}
+
+	if len(jsonMessages) == 0 {
+		// If no SSE format detected, try to parse the whole body as JSON
+		// This handles cases where the response might be malformed SSE or plain JSON
+		return bodyBytes, nil
+	}
+
+	// Return the first JSON message (usually the response we're looking for)
+	return jsonMessages[0], nil
+}
+
+// parseStreamableHTTPResponse parses a response that can be either JSON or SSE format
+func parseStreamableHTTPResponse(resp *http.Response, target interface{}) error {
+	contentType := resp.Header.Get("Content-Type")
+
+	// Read the body once (we might need to try multiple parsing strategies)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check if it's SSE format by Content-Type or by content inspection
+	isSSE := strings.Contains(contentType, "text/event-stream") ||
+		bytes.HasPrefix(bodyBytes, []byte("event:")) ||
+		bytes.HasPrefix(bodyBytes, []byte("data:"))
+
+	if isSSE {
+		jsonData, err := parseSSEResponse(bytes.NewReader(bodyBytes))
+		if err != nil {
+			return fmt.Errorf("failed to parse SSE response: %w", err)
+		}
+		return json.Unmarshal(jsonData, target)
+	}
+
+	// Otherwise, parse as regular JSON
+	// If JSON parsing fails and content looks like SSE, try SSE parsing as fallback
+	err = json.Unmarshal(bodyBytes, target)
+	if err != nil && (bytes.HasPrefix(bodyBytes, []byte("event:")) || bytes.HasPrefix(bodyBytes, []byte("data:"))) {
+		// Try parsing as SSE
+		jsonData, sseErr := parseSSEResponse(bytes.NewReader(bodyBytes))
+		if sseErr == nil {
+			return json.Unmarshal(jsonData, target)
+		}
+	}
+
+	return err
 }
 
 // Initialize connects to the MCP server and initializes the connection
@@ -118,6 +210,7 @@ func (t *HTTPTransport) initializeStreamableHTTP(ctx context.Context) error {
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	for k, v := range t.headers {
 		req.Header.Set(k, v)
 	}
@@ -138,7 +231,7 @@ func (t *HTTPTransport) initializeStreamableHTTP(ctx context.Context) error {
 		return fmt.Errorf("initialize failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse JSON-RPC response
+	// Parse JSON-RPC response (handles both JSON and SSE formats)
 	var jsonRPCResp struct {
 		JSONRPC string `json:"jsonrpc"`
 		Result  struct {
@@ -153,7 +246,7 @@ func (t *HTTPTransport) initializeStreamableHTTP(ctx context.Context) error {
 		ID interface{} `json:"id"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&jsonRPCResp); err != nil {
+	if err := parseStreamableHTTPResponse(resp, &jsonRPCResp); err != nil {
 		return fmt.Errorf("failed to decode JSON-RPC response: %w", err)
 	}
 
@@ -232,6 +325,7 @@ func (t *HTTPTransport) listToolsStreamableHTTP(ctx context.Context) ([]Tool, er
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if t.sessionID != "" {
 		req.Header.Set("Mcp-Session-Id", t.sessionID)
 	}
@@ -250,7 +344,7 @@ func (t *HTTPTransport) listToolsStreamableHTTP(ctx context.Context) ([]Tool, er
 		return nil, fmt.Errorf("list tools failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse JSON-RPC response
+	// Parse JSON-RPC response (handles both JSON and SSE formats)
 	var jsonRPCResp struct {
 		JSONRPC string `json:"jsonrpc"`
 		Result  struct {
@@ -263,7 +357,7 @@ func (t *HTTPTransport) listToolsStreamableHTTP(ctx context.Context) ([]Tool, er
 		ID interface{} `json:"id"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&jsonRPCResp); err != nil {
+	if err := parseStreamableHTTPResponse(resp, &jsonRPCResp); err != nil {
 		return nil, fmt.Errorf("failed to decode JSON-RPC response: %w", err)
 	}
 
@@ -301,6 +395,7 @@ func (t *HTTPTransport) callToolREST(ctx context.Context, name string, arguments
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	for k, v := range t.headers {
 		req.Header.Set(k, v)
 	}
@@ -355,6 +450,7 @@ func (t *HTTPTransport) callToolStreamableHTTP(ctx context.Context, name string,
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if t.sessionID != "" {
 		req.Header.Set("Mcp-Session-Id", t.sessionID)
 	}
@@ -373,7 +469,7 @@ func (t *HTTPTransport) callToolStreamableHTTP(ctx context.Context, name string,
 		return nil, fmt.Errorf("tool call failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse JSON-RPC response
+	// Parse JSON-RPC response (handles both JSON and SSE formats)
 	var jsonRPCResp struct {
 		JSONRPC string `json:"jsonrpc"`
 		Result  struct {
@@ -386,7 +482,7 @@ func (t *HTTPTransport) callToolStreamableHTTP(ctx context.Context, name string,
 		ID interface{} `json:"id"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&jsonRPCResp); err != nil {
+	if err := parseStreamableHTTPResponse(resp, &jsonRPCResp); err != nil {
 		return nil, fmt.Errorf("failed to decode JSON-RPC response: %w", err)
 	}
 
