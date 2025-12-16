@@ -37,16 +37,35 @@ func main() {
 		log.Println("Server will continue with available clients")
 	}
 
-	// Configure Google PSE if environment variables are set
-	apiKey := os.Getenv("GOOGLE_PSE_API_KEY")
-	searchEngineID := os.Getenv("GOOGLE_PSE_SEARCH_ENGINE_ID")
-	if apiKey != "" && searchEngineID != "" {
-		tools.SetGooglePSEConfig(apiKey, searchEngineID)
-		log.Println("Google PSE configured successfully")
+	// Configure Google PSE from config file or environment variables
+	googlePSE := cfg.GetGooglePSEConfig()
+	var apiKey, searchEngineID string
+	var googlePSEEnabled bool
+
+	if googlePSE.Enabled && googlePSE.APIKey != "" && googlePSE.SearchEngineID != "" {
+		// Use config file values
+		apiKey = googlePSE.APIKey
+		searchEngineID = googlePSE.SearchEngineID
+		googlePSEEnabled = true
+		log.Println("Google PSE configured from config file")
 	} else {
-		log.Println("Google PSE not configured (set GOOGLE_PSE_API_KEY and GOOGLE_PSE_SEARCH_ENGINE_ID env vars)")
+		// Try environment variables
+		apiKey = os.Getenv("GOOGLE_PSE_API_KEY")
+		searchEngineID = os.Getenv("GOOGLE_PSE_SEARCH_ENGINE_ID")
+		if apiKey != "" && searchEngineID != "" {
+			googlePSEEnabled = true
+			log.Println("Google PSE configured from environment variables")
+		}
 	}
 
-	// Start server with gateway
-	server.StartWithGateway(gw)
+	if googlePSEEnabled {
+		tools.SetGooglePSEConfig(apiKey, searchEngineID)
+		log.Println("Google PSE enabled successfully")
+	} else {
+		log.Println("Google PSE not configured (set enabled:true in config file or GOOGLE_PSE_API_KEY and GOOGLE_PSE_SEARCH_ENGINE_ID env vars)")
+	}
+
+	// Start server with gateway and configured port
+	port := cfg.GetPort()
+	server.StartWithGatewayAndPort(gw, port)
 }

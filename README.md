@@ -15,6 +15,7 @@ A minimal, standards-compliant Model Context Protocol (MCP) server implementatio
 
 - Go 1.21 or higher
 - No external dependencies (uses only Go standard library)
+- (Optional) Google PSE API Key and Search Engine ID for web search functionality
 
 ## Installation
 
@@ -152,6 +153,50 @@ curl -X POST http://localhost:3333/tools/call \
 - `400 Bad Request`: Invalid JSON or missing required arguments
 - `405 Method Not Allowed`: Wrong HTTP method used
 
+#### 4. Google PSE Search Tool
+
+**Tool Name:** `google_pse_search`
+
+**Description:** Search the web using Google Programmable Search Engine
+
+**Request Body:**
+```json
+{
+  "name": "google_pse_search",
+  "arguments": {
+    "query": "Go programming language",
+    "num": 5,
+    "start": 1
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Found 1000000 results:\n\n1. Go Programming Language\n   URL: https://go.dev/\n   The Go programming language is an open source project...\n\n..."
+    }
+  ]
+}
+```
+
+**Arguments:**
+- `query` (required): Search query string
+- `num` (optional): Number of results (1-10, default: 10)
+- `start` (optional): Start index for pagination (default: 1)
+
+**Example:**
+```bash
+curl -X POST http://localhost:3333/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"google_pse_search","arguments":{"query":"MCP protocol","num":5}}'
+```
+
+**Note:** Requires Google PSE API key and Search Engine ID configured in `mcp-config.json` or environment variables.
+
 ## Project Structure
 
 ```
@@ -173,9 +218,12 @@ mcp-server/
 ├── tools/                    # Tool implementations
 │   ├── echo.go            # Echo tool implementation
 │   ├── echo_test.go       # Echo tool tests
+│   ├── google_pse.go      # Google PSE search tool
+│   ├── google_pse_test.go # Google PSE tests
 │   └── proxy/             # Proxy tools for remote MCPs
-│       ├── cloudflare.go # Cloudflare proxy example
-│       └── filesystem.go  # File System MCP proxy
+│       ├── cloudflare.go  # Cloudflare proxy example
+│       ├── filesystem.go  # File System MCP proxy
+│       └── google_pse.go  # Google PSE proxy wrapper
 └── transport/               # Transport layer abstraction
     ├── interface.go       # Transport interface
     └── http.go           # HTTP transport implementation
@@ -231,6 +279,11 @@ Create a `mcp-config.json` file in the project root:
 
 ```json
 {
+  "port": ":3333",
+  "google_pse": {
+    "api_key": "YOUR_GOOGLE_PSE_API_KEY",
+    "search_engine_id": "YOUR_GOOGLE_PSE_SEARCH_ENGINE_ID"
+  },
   "servers": [
     {
       "name": "cloudflare",
@@ -247,13 +300,30 @@ Create a `mcp-config.json` file in the project root:
 }
 ```
 
+**Configuration Options:**
+- `port`: Server port (default: `":3333"`). Can be `":3333"` or `"3333"` (will be prefixed with `:` automatically)
+- `google_pse`: Google Programmable Search Engine configuration
+  - `api_key`: Your Google PSE API key
+  - `search_engine_id`: Your Google Custom Search Engine ID (CX)
+- `servers`: Array of remote MCP server configurations
+
 #### Option 2: Environment Variables
 
-Set the `MCP_SERVERS` environment variable:
+Set environment variables for configuration:
 
 ```bash
+# Server port (optional, defaults to :3333)
+export MCP_PORT="3333"
+
+# Google PSE configuration (optional)
+export GOOGLE_PSE_API_KEY="your-api-key"
+export GOOGLE_PSE_SEARCH_ENGINE_ID="your-search-engine-id"
+
+# Remote MCP servers (optional)
 export MCP_SERVERS='[{"name":"cloudflare","url":"https://api.cloudflare.com/mcp","transport":"http","enabled":true,"prefix":"cloudflare:"}]'
 ```
+
+**Note:** Configuration file takes precedence over environment variables. If both are provided, the config file values will be used.
 
 ### Using Remote Tools
 
@@ -417,9 +487,49 @@ Contributions are welcome! Please ensure:
 - New features include tests
 - README is updated if needed
 
+## Google PSE Configuration
+
+To use Google Programmable Search Engine (PSE) for web search:
+
+1. **Get your API credentials:**
+   - Create a project in [Google Cloud Console](https://console.cloud.google.com/)
+   - Enable the Custom Search API
+   - Create an API key
+   - Create a Custom Search Engine at [Google Programmable Search Engine](https://programmablesearchengine.google.com/)
+   - Get your Search Engine ID (CX)
+
+2. **Add to config file (`mcp-config.json`):**
+```json
+{
+  "google_pse": {
+    "api_key": "YOUR_API_KEY",
+    "search_engine_id": "YOUR_SEARCH_ENGINE_ID"
+  }
+}
+```
+
+3. **Or use environment variables:**
+```bash
+export GOOGLE_PSE_API_KEY="your-api-key"
+export GOOGLE_PSE_SEARCH_ENGINE_ID="your-search-engine-id"
+```
+
+4. **Use the search tool:**
+```bash
+curl -X POST http://localhost:3333/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"google_pse_search","arguments":{"query":"Go programming language","num":5}}'
+```
+
 ## Example Workflow
 
-1. Start the server:
+1. Create configuration file:
+```bash
+cp mcp-config.json.example mcp-config.json
+# Edit mcp-config.json and add your API keys
+```
+
+2. Start the server:
 ```bash
 go run .
 ```
@@ -457,10 +567,35 @@ curl -X POST http://localhost:3333/tools/call \
 ## Troubleshooting
 
 ### Port Already in Use
-If port 3333 is already in use, modify the port in `server/server.go`:
-```go
-port := ":3333"  // Change to your desired port
+If port 3333 is already in use, configure a different port:
+
+**Option 1:** Set in `mcp-config.json`:
+```json
+{
+  "port": ":8080"
+}
 ```
+
+**Option 2:** Set environment variable:
+```bash
+export MCP_SERVER_PORT=":8080"
+```
+
+**Option 3:** Modify in `server/server.go` (not recommended):
+```go
+port := ":8080"  // Change to your desired port
+```
+
+### Google PSE Not Working
+1. Verify API key and Search Engine ID are set correctly:
+   - In `mcp-config.json`: Set `google_pse.enabled: true` and provide credentials
+   - Or set `GOOGLE_PSE_API_KEY` and `GOOGLE_PSE_SEARCH_ENGINE_ID` environment variables
+
+2. Check API key permissions and quota limits
+
+3. Verify Search Engine ID (CX) is correct for your Google Custom Search Engine
+
+4. Ensure `google_pse.enabled` is set to `true` in config file
 
 ### Connection Refused
 Ensure the server is running before making requests:

@@ -16,9 +16,18 @@ type MCPConfig struct {
 	Prefix    string            `json:"prefix"` // Tool name prefix (e.g., "cloudflare:")
 }
 
+// GooglePSEConfig represents Google PSE configuration
+type GooglePSEConfig struct {
+	APIKey         string `json:"api_key"`
+	SearchEngineID string `json:"search_engine_id"`
+	Enabled        bool   `json:"enabled"`
+}
+
 // Config represents the application configuration
 type Config struct {
-	Servers []MCPConfig `json:"servers"`
+	Port      string          `json:"port"`       // Server port (default: ":3333")
+	GooglePSE GooglePSEConfig `json:"google_pse"` // Google PSE configuration
+	Servers   []MCPConfig     `json:"servers"`    // Remote MCP servers
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -55,6 +64,27 @@ func LoadConfigFromEnv() (*Config, error) {
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
+		Port: ":3333",
+		GooglePSE: GooglePSEConfig{
+			Enabled: false,
+		},
 		Servers: []MCPConfig{},
 	}
+}
+
+// GetPort returns the server port, defaulting to ":3333" if not set
+func (c *Config) GetPort() string {
+	if c.Port == "" {
+		return ":3333"
+	}
+	// Ensure port starts with ":"
+	if c.Port[0] != ':' {
+		return ":" + c.Port
+	}
+	return c.Port
+}
+
+// GetGooglePSEConfig returns Google PSE configuration
+func (c *Config) GetGooglePSEConfig() *GooglePSEConfig {
+	return &c.GooglePSE
 }

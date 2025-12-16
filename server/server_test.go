@@ -68,35 +68,49 @@ func TestHandleToolsList(t *testing.T) {
 		t.Fatalf("Failed to unmarshal response: %v", err)
 	}
 
-	if len(response.Tools) != 1 {
-		t.Fatalf("Expected 1 tool, got %d", len(response.Tools))
+	if len(response.Tools) < 1 {
+		t.Fatalf("Expected at least 1 tool, got %d", len(response.Tools))
 	}
 
-	// Type assert to EchoTool
-	toolMap, ok := response.Tools[0].(map[string]interface{})
-	if !ok {
-		// Try to unmarshal as EchoTool
-		toolJSON, _ := json.Marshal(response.Tools[0])
-		var echoTool tools.EchoTool
-		if err := json.Unmarshal(toolJSON, &echoTool); err == nil {
-			if echoTool.Name != "echo" {
-				t.Errorf("Expected tool name 'echo', got '%s'", echoTool.Name)
+	// Find echo tool in the list
+	foundEcho := false
+	var echoToolMap map[string]interface{}
+	for _, toolInterface := range response.Tools {
+		toolMap, ok := toolInterface.(map[string]interface{})
+		if !ok {
+			// Try to unmarshal as EchoTool
+			toolJSON, _ := json.Marshal(toolInterface)
+			var echoTool tools.EchoTool
+			if err := json.Unmarshal(toolJSON, &echoTool); err == nil {
+				if echoTool.Name == "echo" {
+					foundEcho = true
+					// Convert back to map for validation
+					echoJSON, _ := json.Marshal(echoTool)
+					json.Unmarshal(echoJSON, &echoToolMap)
+					break
+				}
+				continue
 			}
-			return
+			continue
 		}
-		t.Fatalf("Failed to parse tool")
+
+		if name, ok := toolMap["name"].(string); ok && name == "echo" {
+			foundEcho = true
+			echoToolMap = toolMap
+			break
+		}
 	}
 
-	if toolMap["name"] != "echo" {
-		t.Errorf("Expected tool name 'echo', got '%v'", toolMap["name"])
+	if !foundEcho {
+		t.Fatal("Expected to find 'echo' tool in the tools list")
 	}
 
-	if toolMap["description"] != "Echo back the provided message" {
-		t.Errorf("Expected description 'Echo back the provided message', got '%v'", toolMap["description"])
+	if echoToolMap["description"] != "Echo back the provided message" {
+		t.Errorf("Expected description 'Echo back the provided message', got '%v'", echoToolMap["description"])
 	}
 
 	// Verify input schema
-	if inputSchema, ok := toolMap["inputSchema"].(map[string]interface{}); ok {
+	if inputSchema, ok := echoToolMap["inputSchema"].(map[string]interface{}); ok {
 		if schemaType, ok := inputSchema["type"].(string); !ok || schemaType != "object" {
 			t.Errorf("Expected input schema type 'object', got %v", inputSchema["type"])
 		}

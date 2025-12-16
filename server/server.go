@@ -63,13 +63,22 @@ func Start() {
 
 // StartWithGateway starts the HTTP server with a gateway
 func StartWithGateway(gw *gateway.Gateway) {
+	StartWithGatewayAndPort(gw, ":3333")
+}
+
+// StartWithGatewayAndPort starts the HTTP server with a gateway and custom port
+func StartWithGatewayAndPort(gw *gateway.Gateway, port string) {
 	srv := NewServer(gw)
 
 	http.HandleFunc("/initialize", handleInitialize)
 	http.HandleFunc("/tools/list", srv.handleToolsList)
 	http.HandleFunc("/tools/call", srv.handleToolsCall)
 
-	port := ":3333"
+	// Ensure port starts with ":"
+	if port[0] != ':' {
+		port = ":" + port
+	}
+
 	log.Printf("MCP Server starting on port %s\n", port)
 	log.Println("Endpoints available:")
 	log.Println("  GET  /initialize")
