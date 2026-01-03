@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  mcp-server:
+    environment:
+      - MCP_SERVERS=${MCP_SERVERS}
+      - GOOGLE_PSE_API_KEY=${GOOGLE_PSE_API_KEY}
+      - GOOGLE_PSE_SEARCH_ENGINE_ID=${GOOGLE_PSE_SEARCH_ENGINE_ID}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: mcp-server:latest
+    container_name: mcp-server
+    ports:
+      - "3333:3333"
+    networks:
+      - mcp-server-network
+    restart: unless-stopped
+
+networks:
+  mcp-server-network:
+    name: mcp-server-network
+    driver: bridge
