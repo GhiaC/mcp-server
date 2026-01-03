@@ -247,23 +247,25 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// Flush the response
+			// Flush the response immediately
 			if flusher, ok := w.(http.Flusher); ok {
 				flusher.Flush()
 			}
 
 			// Keep connection alive by sending periodic keep-alive messages
 			// Client will send POST requests for JSON-RPC, and we'll respond via this stream
-			ticker := time.NewTicker(30 * time.Second)
+			ticker := time.NewTicker(15 * time.Second)
 			defer ticker.Stop()
 
 			// Create a channel to detect when client disconnects
 			ctx := r.Context()
 
+			// Keep connection alive - this loop keeps the handler running
 			for {
 				select {
 				case <-ctx.Done():
 					// Client disconnected
+					log.Printf("SSE connection closed for session %s", session.ID)
 					return
 				case <-ticker.C:
 					// Send keep-alive comment
