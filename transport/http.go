@@ -27,11 +27,16 @@ func NewHTTPTransport(baseURL string) *HTTPTransport {
 	// Detect if this is a Cloudflare MCP server (uses streamable-http)
 	useStreamableHTTP := strings.Contains(baseURL, "mcp.cloudflare.com")
 
+	// Create HTTP client with appropriate timeout
+	// For SSE connections, we use context timeout instead of client timeout
+	// to allow long-lived connections
+	httpClient := &http.Client{
+		Timeout: 60 * time.Second, // Increased timeout for regular requests
+	}
+
 	return &HTTPTransport{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		baseURL:           baseURL,
+		httpClient:        httpClient,
 		headers:           make(map[string]string),
 		useStreamableHTTP: useStreamableHTTP,
 		requestID:         1,

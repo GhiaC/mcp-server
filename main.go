@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"mcp-go/config"
 	"mcp-go/gateway"
@@ -30,12 +29,9 @@ func main() {
 		log.Fatalf("Failed to load MCP clients: %v", err)
 	}
 
-	// Initialize all clients
-	ctx := context.Background()
-	if err := gw.InitializeAll(ctx); err != nil {
-		log.Printf("Warning: Some MCP clients failed to initialize: %v", err)
-		log.Println("Server will continue with available clients")
-	}
+	// Note: Clients will be initialized lazily when first used (tools/list or tools/call)
+	// This allows the server to start immediately without waiting for remote servers
+	log.Println("MCP clients loaded. They will be initialized on first use.")
 
 	// Configure Google PSE from config file or environment variables
 	googlePSE := cfg.GetGooglePSEConfig()

@@ -127,16 +127,23 @@ func (s *Server) getOrCreateSession(sessionID string) *Session {
 	return session
 }
 
+// setCORSHeaders sets CORS headers for all responses
+func setCORSHeaders(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization, X-Requested-With")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
+	w.Header().Set("Access-Control-Max-Age", "3600")
+}
+
 // writeSSEResponse writes a JSON-RPC response as SSE
 func writeSSEResponse(w http.ResponseWriter, response JSONRPCResponse) error {
+	// Set CORS headers
+	setCORSHeaders(w)
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 
 	// Marshal response to JSON
 	jsonData, err := json.Marshal(response)
@@ -160,11 +167,9 @@ func writeSSEResponse(w http.ResponseWriter, response JSONRPCResponse) error {
 
 // writeJSONResponse writes a JSON-RPC response as regular JSON (fallback)
 func writeJSONResponse(w http.ResponseWriter, response JSONRPCResponse) error {
+	// Set CORS headers
+	setCORSHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -201,23 +206,23 @@ func (s *Server) authenticate(r *http.Request) bool {
 
 // handleMCP handles the main MCP endpoint (POST /mcp or GET /mcp for SSE)
 func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
+	// Log incoming requests for debugging
+	log.Printf("Incoming request: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	// Handle CORS preflight requests
 	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
-		w.Header().Set("Access-Control-Max-Age", "3600")
+		setCORSHeaders(w)
 		w.WriteHeader(http.StatusOK)
+		log.Printf("CORS preflight request handled successfully")
 		return
 	}
 
 	// Authenticate request (skip for OPTIONS)
 	if !s.authenticate(r) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		setCORSHeaders(w)
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		log.Printf("Authentication failed for request from %s", r.RemoteAddr)
 		return
 	}
 
@@ -230,15 +235,14 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			sessionID := r.Header.Get("Mcp-Session-Id")
 			session := s.getOrCreateSession(sessionID)
 
+			// Set CORS headers
+			setCORSHeaders(w)
 			// Set SSE headers
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Connection", "keep-alive")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 			w.Header().Set("Mcp-Session-Id", session.ID)
+			log.Printf("SSE connection established for session %s", session.ID)
 
 			// Send initial connection confirmation
 			_, err := fmt.Fprintf(w, ": connected\n\n")
@@ -283,9 +287,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		setCORSHeaders(w)
 		log.Printf("Received %s request to %s, expected POST or GET", r.Method, r.URL.Path)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -295,6 +297,8 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("Mcp-Session-Id")
 	session := s.getOrCreateSession(sessionID)
 
+	// Set CORS headers
+	setCORSHeaders(w)
 	// Set session ID in response header
 	w.Header().Set("Mcp-Session-Id", session.ID)
 
@@ -577,6 +581,17 @@ func StartWithGatewayAndPort(gw *gateway.Gateway, port string) {
 	StartWithGatewayAndPortAndAuth(gw, port, "")
 }
 
+// handleHealth handles health check requests
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	setCORSHeaders(w)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "ok",
+		"service": "mcp-server",
+	})
+}
+
 // StartWithGatewayAndPortAndAuth starts the HTTP server with a gateway, custom port, and bearer token
 func StartWithGatewayAndPortAndAuth(gw *gateway.Gateway, port string, bearerToken string) {
 	var srv *Server
@@ -587,6 +602,9 @@ func StartWithGatewayAndPortAndAuth(gw *gateway.Gateway, port string, bearerToke
 		srv = NewServer(gw)
 		log.Println("Bearer token authentication disabled (no token configured)")
 	}
+
+	// Health check endpoint (responds immediately, no auth required)
+	http.HandleFunc("/health", srv.handleHealth)
 
 	// Single MCP endpoint
 	http.HandleFunc("/mcp", srv.handleMCP)
@@ -599,15 +617,27 @@ func StartWithGatewayAndPortAndAuth(gw *gateway.Gateway, port string, bearerToke
 		port = ":" + port
 	}
 
+	// Create HTTP server with proper timeout configurations
+	// WriteTimeout is set to 0 (disabled) to allow long-lived SSE connections
+	// SSE connections send keep-alive messages every 15 seconds to prevent idle timeout
+	server := &http.Server{
+		Addr:              port,
+		ReadHeaderTimeout: 10 * time.Second,  // Timeout for reading request headers
+		ReadTimeout:       30 * time.Second,  // Timeout for reading entire request body
+		WriteTimeout:      0,                 // Disabled - allows long-lived SSE connections
+		IdleTimeout:       300 * time.Second, // Timeout for idle connections (5 minutes)
+	}
+
 	log.Printf("MCP Server starting on port %s\n", port)
 	log.Println("Endpoints available:")
+	log.Println("  GET  /health (Health check - responds immediately)")
 	log.Println("  POST /mcp (JSON-RPC 2.0 over SSE)")
 	log.Println("  POST / (JSON-RPC 2.0 over SSE)")
 	if gw != nil {
 		log.Println("Gateway enabled: Remote MCP servers will be accessible")
 	}
 
-	if err := http.ListenAndServe(port, nil); err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Server failed to start: %v\n", err)
 	}
 }

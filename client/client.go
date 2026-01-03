@@ -78,14 +78,32 @@ func (c *MCPClient) Initialize(ctx context.Context) error {
 	return nil
 }
 
+// ensureInitialized ensures the client is initialized (lazy initialization)
+func (c *MCPClient) ensureInitialized(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.initialized {
+		return nil
+	}
+
+	if err := c.transport.Initialize(ctx, nil); err != nil {
+		return fmt.Errorf("failed to initialize client %s: %w", c.config.Name, err)
+	}
+
+	c.initialized = true
+	return nil
+}
+
 // ListTools returns all available tools
 func (c *MCPClient) ListTools(ctx context.Context) ([]transport.Tool, error) {
+	// Lazy initialization - initialize if not already done
+	if err := c.ensureInitialized(ctx); err != nil {
+		return nil, err
+	}
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
-	if !c.initialized {
-		return nil, fmt.Errorf("client %s not initialized", c.config.Name)
-	}
 
 	tools, err := c.transport.ListTools(ctx)
 	if err != nil {
@@ -104,12 +122,13 @@ func (c *MCPClient) ListTools(ctx context.Context) ([]transport.Tool, error) {
 
 // CallTool executes a tool with the given arguments
 func (c *MCPClient) CallTool(ctx context.Context, name string, arguments map[string]interface{}) (*transport.ToolResponse, error) {
+	// Lazy initialization - initialize if not already done
+	if err := c.ensureInitialized(ctx); err != nil {
+		return nil, err
+	}
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
-	if !c.initialized {
-		return nil, fmt.Errorf("client %s not initialized", c.config.Name)
-	}
 
 	// Remove prefix if present
 	actualName := name

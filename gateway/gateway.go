@@ -65,6 +65,7 @@ func (g *Gateway) InitializeAll(ctx context.Context) error {
 }
 
 // ListAllTools returns all tools from all connected clients
+// Tools are fetched in parallel for better performance
 func (g *Gateway) ListAllTools(ctx context.Context) ([]transport.Tool, error) {
 	g.mu.RLock()
 	clients := make([]client.Client, 0, len(g.clients))
@@ -73,14 +74,31 @@ func (g *Gateway) ListAllTools(ctx context.Context) ([]transport.Tool, error) {
 	}
 	g.mu.RUnlock()
 
-	var allTools []transport.Tool
+	// Use a channel to collect results from parallel goroutines
+	type result struct {
+		tools []transport.Tool
+		err   error
+		name  string
+	}
+	results := make(chan result, len(clients))
+
+	// Fetch tools from all clients in parallel
 	for _, c := range clients {
-		tools, err := c.ListTools(ctx)
-		if err != nil {
-			log.Printf("Warning: Failed to list tools from %s: %v", c.GetName(), err)
+		go func(client client.Client) {
+			tools, err := client.ListTools(ctx)
+			results <- result{tools: tools, err: err, name: client.GetName()}
+		}(c)
+	}
+
+	// Collect results
+	var allTools []transport.Tool
+	for i := 0; i < len(clients); i++ {
+		res := <-results
+		if res.err != nil {
+			log.Printf("Warning: Failed to list tools from %s: %v", res.name, res.err)
 			continue
 		}
-		allTools = append(allTools, tools...)
+		allTools = append(allTools, res.tools...)
 	}
 
 	return allTools, nil
