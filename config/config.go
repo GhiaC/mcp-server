@@ -27,7 +27,7 @@ type GooglePSEConfig struct {
 type Config struct {
 	Port        string          `json:"port"`         // Server port (default: ":3333")
 	BearerToken string          `json:"bearer_token"` // Bearer token for authentication (optional)
-	GooglePSE   GooglePSEConfig `json:"google_pse"`    // Google PSE configuration
+	GooglePSE   GooglePSEConfig `json:"google_pse"`   // Google PSE configuration
 	Servers     []MCPConfig     `json:"servers"`      // Remote MCP servers
 }
 
@@ -51,12 +51,12 @@ func LoadConfig(path string) (*Config, error) {
 func LoadConfigFromEnv() (*Config, error) {
 	serversJSON := os.Getenv("MCP_SERVERS")
 	bearerToken := os.Getenv("MCP_BEARER_TOKEN")
-	
+
 	config := &Config{
 		BearerToken: bearerToken,
 		Servers:     []MCPConfig{},
 	}
-	
+
 	if serversJSON == "" {
 		return config, nil
 	}
