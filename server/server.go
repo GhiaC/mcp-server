@@ -171,6 +171,19 @@ func writeJSONResponse(w http.ResponseWriter, response JSONRPCResponse) error {
 	setCORSHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
 
+	// Set status code based on response
+	if response.Error != nil {
+		// For JSON-RPC errors, we still return 200 OK with error in body
+		// But if it's a server error, use 500
+		if response.Error.Code == -32000 {
+			w.WriteHeader(http.StatusInternalServerError)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+
 	return json.NewEncoder(w).Encode(response)
 }
 
@@ -347,10 +360,13 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	case "initialize":
 		response, err = s.handleInitialize(req)
 	case "tools/list":
+		// tools/list doesn't require params, but accept empty params
+		log.Printf("Handling tools/list request (ID: %v)", req.ID)
 		response, err = s.handleToolsList(r.Context(), req)
 	case "tools/call":
 		response, err = s.handleToolsCall(r.Context(), req)
 	default:
+		log.Printf("Unknown method requested: %s", req.Method)
 		response = JSONRPCResponse{
 			JSONRPC: "2.0",
 			Error: &RPCError{
@@ -362,6 +378,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		log.Printf("Error handling %s request: %v", req.Method, err)
 		response = JSONRPCResponse{
 			JSONRPC: "2.0",
 			Error: &RPCError{
@@ -370,12 +387,21 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			},
 			ID: req.ID,
 		}
+		// Set HTTP status code to 500 for server errors
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 
 	// Ensure ID is set
 	response.ID = req.ID
 	if response.JSONRPC == "" {
 		response.JSONRPC = "2.0"
+	}
+
+	// Log response for debugging
+	if response.Error != nil {
+		log.Printf("Returning error response for %s: %d - %s", req.Method, response.Error.Code, response.Error.Message)
+	} else {
+		log.Printf("Returning success response for %s (ID: %v)", req.Method, req.ID)
 	}
 
 	// Write response
@@ -417,10 +443,14 @@ func (s *Server) handleToolsList(ctx context.Context, req JSONRPCRequest) (JSONR
 	// Add local echo tool
 	echoTool := tools.GetEchoTool()
 	allTools = append(allTools, echoTool)
+	log.Printf("Added local tool: %s", echoTool.Name)
 
-	// Add local Google PSE tool
+	// Add local Google PSE tool (only if enabled)
 	googlePSETool := tools.GetGooglePSETool()
-	allTools = append(allTools, googlePSETool)
+	if tools.GetGooglePSEConfig() != nil {
+		allTools = append(allTools, googlePSETool)
+		log.Printf("Added local tool: %s", googlePSETool.Name)
+	}
 
 	// Add tools from gateway (remote MCP servers)
 	if s.gateway != nil {
@@ -428,12 +458,15 @@ func (s *Server) handleToolsList(ctx context.Context, req JSONRPCRequest) (JSONR
 		if err != nil {
 			log.Printf("Warning: Failed to list remote tools: %v", err)
 		} else {
+			log.Printf("Successfully fetched %d remote tools", len(remoteTools))
 			// Convert transport.Tool to interface{} for JSON encoding
 			for _, tool := range remoteTools {
 				allTools = append(allTools, tool)
 			}
 		}
 	}
+
+	log.Printf("Total tools to return: %d", len(allTools))
 
 	result := ToolsListResult{
 		Tools: allTools,
