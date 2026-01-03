@@ -156,7 +156,18 @@ func writeJSONResponse(w http.ResponseWriter, response JSONRPCResponse) error {
 
 // handleMCP handles the main MCP endpoint (POST /mcp)
 func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
+	// Handle CORS preflight requests
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept")
+		w.Header().Set("Access-Control-Max-Age", "3600")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if r.Method != http.MethodPost {
+		log.Printf("Received %s request to %s, expected POST", r.Method, r.URL.Path)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
