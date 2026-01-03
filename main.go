@@ -65,7 +65,13 @@ func main() {
 		log.Println("Google PSE not configured (set enabled:true in config file or GOOGLE_PSE_API_KEY and GOOGLE_PSE_SEARCH_ENGINE_ID env vars)")
 	}
 
-	// Start server with gateway and configured port
+	// Get bearer token from config or environment
+	bearerToken := cfg.GetBearerToken()
+	if bearerToken == "" {
+		bearerToken = os.Getenv("MCP_BEARER_TOKEN")
+	}
+
+	// Start server with gateway, configured port, and bearer token
 	port := cfg.GetPort()
-	server.StartWithGatewayAndPort(gw, port)
+	server.StartWithGatewayAndPortAndAuth(gw, port, bearerToken)
 }

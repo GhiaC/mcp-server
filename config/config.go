@@ -25,9 +25,10 @@ type GooglePSEConfig struct {
 
 // Config represents the application configuration
 type Config struct {
-	Port      string          `json:"port"`       // Server port (default: ":3333")
-	GooglePSE GooglePSEConfig `json:"google_pse"` // Google PSE configuration
-	Servers   []MCPConfig     `json:"servers"`    // Remote MCP servers
+	Port        string          `json:"port"`         // Server port (default: ":3333")
+	BearerToken string          `json:"bearer_token"` // Bearer token for authentication (optional)
+	GooglePSE   GooglePSEConfig `json:"google_pse"`    // Google PSE configuration
+	Servers     []MCPConfig     `json:"servers"`      // Remote MCP servers
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -49,8 +50,15 @@ func LoadConfig(path string) (*Config, error) {
 // Format: MCP_SERVERS='[{"name":"cloudflare","url":"...","transport":"http"}]'
 func LoadConfigFromEnv() (*Config, error) {
 	serversJSON := os.Getenv("MCP_SERVERS")
+	bearerToken := os.Getenv("MCP_BEARER_TOKEN")
+	
+	config := &Config{
+		BearerToken: bearerToken,
+		Servers:     []MCPConfig{},
+	}
+	
 	if serversJSON == "" {
-		return &Config{Servers: []MCPConfig{}}, nil
+		return config, nil
 	}
 
 	var servers []MCPConfig
@@ -58,13 +66,15 @@ func LoadConfigFromEnv() (*Config, error) {
 		return nil, fmt.Errorf("failed to parse MCP_SERVERS env var: %w", err)
 	}
 
-	return &Config{Servers: servers}, nil
+	config.Servers = servers
+	return config, nil
 }
 
 // DefaultConfig returns a default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Port: ":3333",
+		Port:        ":3333",
+		BearerToken: "",
 		GooglePSE: GooglePSEConfig{
 			Enabled: false,
 		},
@@ -87,4 +97,9 @@ func (c *Config) GetPort() string {
 // GetGooglePSEConfig returns Google PSE configuration
 func (c *Config) GetGooglePSEConfig() *GooglePSEConfig {
 	return &c.GooglePSE
+}
+
+// GetBearerToken returns the bearer token for authentication
+func (c *Config) GetBearerToken() string {
+	return c.BearerToken
 }

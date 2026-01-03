@@ -73,16 +73,27 @@ type Session struct {
 
 // Server holds the server state including gateway and sessions
 type Server struct {
-	gateway  *gateway.Gateway
-	sessions map[string]*Session
-	mu       sync.RWMutex
+	gateway     *gateway.Gateway
+	sessions    map[string]*Session
+	bearerToken string // Bearer token for authentication (empty means no auth required)
+	mu          sync.RWMutex
 }
 
 // NewServer creates a new server instance
 func NewServer(gw *gateway.Gateway) *Server {
 	return &Server{
-		gateway:  gw,
-		sessions: make(map[string]*Session),
+		gateway:     gw,
+		sessions:    make(map[string]*Session),
+		bearerToken: "",
+	}
+}
+
+// NewServerWithAuth creates a new server instance with bearer token authentication
+func NewServerWithAuth(gw *gateway.Gateway, bearerToken string) *Server {
+	return &Server{
+		gateway:     gw,
+		sessions:    make(map[string]*Session),
+		bearerToken: bearerToken,
 	}
 }
 
@@ -123,7 +134,9 @@ func writeSSEResponse(w http.ResponseWriter, response JSONRPCResponse) error {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 
 	// Marshal response to JSON
 	jsonData, err := json.Marshal(response)
@@ -149,9 +162,41 @@ func writeSSEResponse(w http.ResponseWriter, response JSONRPCResponse) error {
 func writeJSONResponse(w http.ResponseWriter, response JSONRPCResponse) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 
 	return json.NewEncoder(w).Encode(response)
+}
+
+// authenticate checks if the request has a valid bearer token
+func (s *Server) authenticate(r *http.Request) bool {
+	// If no bearer token is configured, allow all requests
+	if s.bearerToken == "" {
+		return true
+	}
+
+	// Extract bearer token from Authorization header
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		log.Printf("Authentication failed: No Authorization header")
+		return false
+	}
+
+	// Check if it starts with "Bearer "
+	if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
+		log.Printf("Authentication failed: Invalid Authorization header format")
+		return false
+	}
+
+	// Extract token
+	token := authHeader[7:]
+	if token != s.bearerToken {
+		log.Printf("Authentication failed: Token mismatch")
+		return false
+	}
+
+	return true
 }
 
 // handleMCP handles the main MCP endpoint (POST /mcp or GET /mcp for SSE)
@@ -160,9 +205,19 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
 		w.Header().Set("Access-Control-Max-Age", "3600")
 		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Authenticate request (skip for OPTIONS)
+	if !s.authenticate(r) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -174,35 +229,37 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			// Get or create session
 			sessionID := r.Header.Get("Mcp-Session-Id")
 			session := s.getOrCreateSession(sessionID)
-			
+
 			// Set SSE headers
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Connection", "keep-alive")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 			w.Header().Set("Mcp-Session-Id", session.ID)
-			
+
 			// Send initial connection confirmation
 			_, err := fmt.Fprintf(w, ": connected\n\n")
 			if err != nil {
 				log.Printf("Error writing SSE connection message: %v", err)
 				return
 			}
-			
+
 			// Flush the response
 			if flusher, ok := w.(http.Flusher); ok {
 				flusher.Flush()
 			}
-			
+
 			// Keep connection alive by sending periodic keep-alive messages
 			// Client will send POST requests for JSON-RPC, and we'll respond via this stream
 			ticker := time.NewTicker(30 * time.Second)
 			defer ticker.Stop()
-			
+
 			// Create a channel to detect when client disconnects
 			ctx := r.Context()
-			
+
 			for {
 				select {
 				case <-ctx.Done():
@@ -224,6 +281,9 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		log.Printf("Received %s request to %s, expected POST or GET", r.Method, r.URL.Path)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -507,12 +567,24 @@ func Start() {
 
 // StartWithGateway starts the HTTP server with a gateway
 func StartWithGateway(gw *gateway.Gateway) {
-	StartWithGatewayAndPort(gw, ":3333")
+	StartWithGatewayAndPortAndAuth(gw, ":3333", "")
 }
 
 // StartWithGatewayAndPort starts the HTTP server with a gateway and custom port
 func StartWithGatewayAndPort(gw *gateway.Gateway, port string) {
-	srv := NewServer(gw)
+	StartWithGatewayAndPortAndAuth(gw, port, "")
+}
+
+// StartWithGatewayAndPortAndAuth starts the HTTP server with a gateway, custom port, and bearer token
+func StartWithGatewayAndPortAndAuth(gw *gateway.Gateway, port string, bearerToken string) {
+	var srv *Server
+	if bearerToken != "" {
+		srv = NewServerWithAuth(gw, bearerToken)
+		log.Println("Bearer token authentication enabled")
+	} else {
+		srv = NewServer(gw)
+		log.Println("Bearer token authentication disabled (no token configured)")
+	}
 
 	// Single MCP endpoint
 	http.HandleFunc("/mcp", srv.handleMCP)

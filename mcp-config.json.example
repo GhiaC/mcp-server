@@ -1,5 +1,6 @@
 {
   "port": ":3333",
+  "bearer_token": "YOUR_BEARER_TOKEN_HERE",
   "google_pse": {
     "enabled": true,
     "api_key": "YOUR_GOOGLE_PSE_API_KEY",
