@@ -179,24 +179,32 @@ func (s *Server) authenticate(r *http.Request) bool {
 	// Extract bearer token from Authorization header
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		log.Printf("Authentication failed: No Authorization header")
+		log.Printf("Authentication failed: No Authorization header. Expected token: %s", maskToken(s.bearerToken))
 		return false
 	}
 
 	// Check if it starts with "Bearer "
 	if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
-		log.Printf("Authentication failed: Invalid Authorization header format")
+		log.Printf("Authentication failed: Invalid Authorization header format. Received: %s, Expected token: %s", authHeader, maskToken(s.bearerToken))
 		return false
 	}
 
 	// Extract token
 	token := authHeader[7:]
 	if token != s.bearerToken {
-		log.Printf("Authentication failed: Token mismatch")
+		log.Printf("Authentication failed: Token mismatch. Received: %s, Expected: %s", maskToken(token), maskToken(s.bearerToken))
 		return false
 	}
 
 	return true
+}
+
+// maskToken masks the token for security (shows first 4 and last 4 characters)
+func maskToken(token string) string {
+	if len(token) <= 8 {
+		return "****"
+	}
+	return token[:4] + "..." + token[len(token)-4:]
 }
 
 // handleMCP handles the main MCP endpoint (POST /mcp or GET /mcp for SSE)
