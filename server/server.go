@@ -154,20 +154,77 @@ func writeJSONResponse(w http.ResponseWriter, response JSONRPCResponse) error {
 	return json.NewEncoder(w).Encode(response)
 }
 
-// handleMCP handles the main MCP endpoint (POST /mcp)
+// handleMCP handles the main MCP endpoint (POST /mcp or GET /mcp for SSE)
 func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	// Handle CORS preflight requests
 	if r.Method == http.MethodOptions {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept")
 		w.Header().Set("Access-Control-Max-Age", "3600")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
+	// Handle GET requests for SSE connection
+	if r.Method == http.MethodGet {
+		acceptHeader := r.Header.Get("Accept")
+		if strings.Contains(acceptHeader, "text/event-stream") || acceptHeader == "" {
+			// This is an SSE connection request
+			// Get or create session
+			sessionID := r.Header.Get("Mcp-Session-Id")
+			session := s.getOrCreateSession(sessionID)
+			
+			// Set SSE headers
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Accept")
+			w.Header().Set("Mcp-Session-Id", session.ID)
+			
+			// Send initial connection confirmation
+			_, err := fmt.Fprintf(w, ": connected\n\n")
+			if err != nil {
+				log.Printf("Error writing SSE connection message: %v", err)
+				return
+			}
+			
+			// Flush the response
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			
+			// Keep connection alive by sending periodic keep-alive messages
+			// Client will send POST requests for JSON-RPC, and we'll respond via this stream
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			
+			// Create a channel to detect when client disconnects
+			ctx := r.Context()
+			
+			for {
+				select {
+				case <-ctx.Done():
+					// Client disconnected
+					return
+				case <-ticker.C:
+					// Send keep-alive comment
+					_, err := fmt.Fprintf(w, ": keep-alive\n\n")
+					if err != nil {
+						log.Printf("Error writing SSE keep-alive: %v", err)
+						return
+					}
+					if flusher, ok := w.(http.Flusher); ok {
+						flusher.Flush()
+					}
+				}
+			}
+		}
+	}
+
 	if r.Method != http.MethodPost {
-		log.Printf("Received %s request to %s, expected POST", r.Method, r.URL.Path)
+		log.Printf("Received %s request to %s, expected POST or GET", r.Method, r.URL.Path)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
